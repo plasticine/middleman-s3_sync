@@ -14,43 +14,53 @@ module Middleman
       :existing_remote_file,
       :build_dir,
       :force,
-      :prefer_gzip
+      :prefer_gzip,
+      :exclude
     )
 
-      def add_caching_policy(content_type, options)
-        caching_policies[content_type.to_s] = BrowserCachePolicy.new(options)
+      def set_default_headers(content_type, options)
+        headers[:default] = FileHeaders.new(options)
       end
 
-      def caching_policy_for(content_type)
-        caching_policies.fetch(content_type.to_s, caching_policies[:default])
+      def set_headers(content_type, options)
+        headers[content_type.to_s] = FileHeaders.new(options)
       end
 
-      def default_caching_policy
-        caching_policies[:default]
+      def get_headers(content_type)
+        headers.fetch(content_type.to_s, default_headers)
       end
 
-      def caching_policies
-        @caching_policies ||= Map.new
+      def default_headers
+        headers[:default]
+      end
+
+      def headers
+        @headers ||= Map.new
       end
 
       protected
-      class BrowserCachePolicy
-        attr_accessor :policies
+
+      class FileHeaders
+        attr_accessor :headers
 
         def initialize(options)
-          @policies = Map.from_hash(options)
+          @headers = Map.from_hash(options)
+        end
+
+        def content_encoding
+          headers.has_key?(:content_encoding) ? headers['content_encoding'] : false
         end
 
         def cache_control
           policy = []
-          policy << "max-age=#{policies.max_age}" if policies.has_key?(:max_age)
-          policy << "s-maxage=#{s_maxage}" if policies.has_key?(:s_maxage)
-          policy << "public" if policies.fetch(:public, false)
-          policy << "private" if policies.fetch(:private, false)
-          policy << "no-cache" if policies.fetch(:no_cache, false)
-          policy << "no-store" if policies.fetch(:no_store, false)
-          policy << "must-revalidate" if policies.fetch(:must_revalidate, false)
-          policy << "proxy-revalidate" if policies.fetch(:proxy_revalidate, false)
+          policy << "max-age=#{headers.cache_control.max_age}" if headers.cache_control.has_key?(:max_age)
+          policy << "s-maxage=#{s_maxage}" if headers.cache_control.has_key?(:s_maxage)
+          policy << "public" if headers.cache_control.fetch(:public, false)
+          policy << "private" if headers.cache_control.fetch(:private, false)
+          policy << "no-cache" if headers.cache_control.fetch(:no_cache, false)
+          policy << "no-store" if headers.cache_control.fetch(:no_store, false)
+          policy << "must-revalidate" if headers.cache_control.fetch(:must_revalidate, false)
+          policy << "proxy-revalidate" if headers.cache_control.fetch(:proxy_revalidate, false)
           if policy.empty?
             nil
           else
@@ -59,7 +69,7 @@ module Middleman
         end
 
         def expires
-          if expiration = policies.fetch(:expires, nil)
+          if expiration = headers.fetch(:expires, nil)
             CGI.rfc1123_date(expiration)
           end
         end
@@ -95,12 +105,12 @@ module Middleman
           ::Middleman::S3Sync.options
         end
 
-        def default_caching_policy(policy = {})
-          options.add_caching_policy(:default, policy)
+        def set_headers(content_type, metadata={})
+          options.set_headers(content_type, metadata)
         end
 
-        def caching_policy(content_type, policy = {})
-          options.add_caching_policy(content_type, policy)
+        def set_default_headers(metadata={})
+          set_headers(:default, metadata)
         end
       end
     end
